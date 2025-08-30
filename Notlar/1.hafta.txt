@@ -1,0 +1,38 @@
+Hafta 1 — Namespace + Deployment
+
+1) Namespace oluşturma
+Bu adımda demo isimli namespace oluşturuldu.
+
+** Kullanılan komutlar 
+<kubectl apply -f namespace/demo-namespace.yaml>
+<kubectl get ns>
+
+** Çıktılar 
+namespace/demo created
+NAME     STATUS   AGE
+demo     Active   15m
+
+** Hatalar/Çözümler
+Hata: yok
+Çözüm: yok
+
+                       
+                       
+                       
+2) Deployment oluşturma
+Bu adımda nginx uygulamasını bir container olarak, Kubernetes cluster’ının demo namespace’i içinde çalıştırıyoruz
+
+** Kullanılan komutlar 
+<kubectl apply -f deployments/nginx-deploy.yaml>
+<kubectl get deploy -n demo>
+<kubectl get pods -n demo>
+
+** Çıktılar 
+deployment.apps/nginx-deploy created
+NAME                         READY   STATUS    RESTARTS   AGE
+nginx-deploy-567d948-twz5h   1/1     Running   0          28s
+
+** Hatalar/Çözümler
+Hata: Error from server (NotFound): namespaces "demo" not found
+Sebep: Deployment, demo namespace içinde çalışacak ama namespace henüz yoktu.
+Çözüm: Önce namespace’i apply ettim, sonra deployment’ı uyguladım. Artık podlar sorunsuz şekilde çalışıyor.
