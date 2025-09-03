@@ -4,15 +4,10 @@ metadata:
   name: nginx-deploy
   namespace: demo
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: nginx
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 1
   template:
     metadata:
       labels:
@@ -23,3 +18,4 @@ spec:
           image: nginx:1.27.0
           ports:
             - containerPort: 80
+
