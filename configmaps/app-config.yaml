@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: demo
+data:
+  welcome-message: "Merhaba, demo ortamına hoşgeldiniz!"
+

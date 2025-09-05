@@ -1,4 +1,7 @@
-01 – Namespace oluşturma DoD
+Hafta 1 — Namespace + Deployment + Service (ClusterIP & NodePort) + Ingress + ConfigMap & Secret +Readiness & Liveness 
+
+
+01 – Namespace DoD
 
 - Demo namespace manifesti git repoda mevcut
   (Kontrol: ls -R | grep demo-namespace.yaml)
@@ -10,7 +13,7 @@
   (Kontrol: kubectl delete ns demo, kubectl apply -f demo-namespace.yaml)
   
   
-02 – Deployment Oluşturma DoD (nginx Deployment)
+02 – Deployment DoD (nginx Deployment)
 - Deployment manifesti git repoda mevcut
   (Kontrol: ls -R | grep nginx-deploy.yaml)
 - Deployment metadata.name doğru tanımlanmış
@@ -25,3 +28,47 @@
   (Kontrol: kubectl get pods -n demo)
 - Replicas sayısı doğru
   (Kontrol: kubectl get deployment nginx-deploy -n demo -o yaml | grep replicas)
+  
+03 – ClusterIP DoD
+
+- ClusterIP servis manifesti git repoda mevcut
+(Kontrol: ls -R | grep nginx-clusterip.yaml)
+- Servis tipi doğru tanımlanmış (ClusterIP)
+(Kontrol: kubectl get svc nginx-clusterip -n demo)
+- Pod’lara iç erişim sağlanıyor
+(Kontrol: kubectl exec -n demo <pod-ismi> -- curl http://nginx-clusterip)
+- Port doğru ayarlanmış (80/TCP)
+(Kontrol: kubectl get svc nginx-clusterip -n demo -o yaml | grep port)
+- Servis demo namespace’de oluşturulmuş
+(Kontrol: kubectl get svc -n demo)
+
+
+
+04 - NodePort DoD
+
+- Servis manifesti git repoda mevcut
+(Kontrol: ls -R | grep nginx-nodeport.yaml)
+- NodePort tipi doğru tanımlanmış
+(Kontrol: kubectl get svc nginx-nodeport -n demo → TYPE=NodePort)
+- Dış erişim sağlanabiliyor
+(Kontrol: curl http://<Node_IP>:<NodePort> → nginx sayfası gelmeli)
+- Port eşleşmesi doğru
+(Kontrol: kubectl get svc nginx-nodeport -n demo -o yaml | grep nodePort → 30080 veya belirlenen port)
+- Namespace doğru
+(Kontrol: kubectl get svc -n demo → Servis demo namespace’inde olmalı)
+
+
+05 – Ingress DoD
+
+Manifest repo’da mevcut
+(Kontrol: ls -R | grep nginx-ingress.yaml)
+Ingress resource demo namespace’inde oluşturulmuş
+(Kontrol: kubectl get ingress -n demo)
+Host doğru tanımlanmış (myapp.local)
+(Kontrol: kubectl describe ingress nginx-ingress -n demo | grep Host)
+Pod’lara trafik yönleniyor (Service selector ile eşleşiyor)
+(Kontrol: kubectl describe ingress nginx-ingress -n demo)
+Dış erişim sağlanabiliyor (/etc/hosts ile)
+(Kontrol: curl http://myapp.local → nginx karşılama sayfası gelmeli )
+Ingress Controller cluster’da çalışıyor
+(Kontrol: kubectl get pods -n ingress-nginx ve kubectl get svc -n ingress-nginx)
