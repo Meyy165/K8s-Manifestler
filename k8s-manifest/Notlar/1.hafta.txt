@@ -1,0 +1,193 @@
+Hafta 1 — Namespace + Deployment + Service (ClusterIP & NodePort) + Ingress + ConfigMap & Secret + Readiness & Liveness 
+
+1) Namespace oluşturma
+Bu adımda demo isimli namespace oluşturuldu.
+
+** Kullanılan komutlar 
+<kubectl apply -f namespace/demo-namespace.yaml>
+<kubectl get ns>
+
+** Çıktılar 
+namespace/demo created
+NAME     STATUS   AGE
+demo     Active   15m
+
+** Hatalar/Çözümler
+Hata: yok
+Çözüm: yok
+
+                       
+                                                                       *******************************
+                       
+2) Deployment oluşturma
+Bu adımda nginx uygulamasını bir container olarak, Kubernetes cluster’ının demo namespace’i içinde çalıştırıyoruz
+
+** Kullanılan komutlar 
+<kubectl apply -f deployments/nginx-deploy.yaml>
+<kubectl get deploy -n demo>
+<kubectl get pods -n demo>
+
+** Çıktılar 
+deployment.apps/nginx-deploy created
+NAME                         READY   STATUS    RESTARTS   AGE
+nginx-deploy-567d948-twz5h   1/1     Running   0          28s
+
+** Hatalar/Çözümler
+Hata: Error from server (NotFound): namespaces "demo" not found
+Sebep: Deployment, demo namespace içinde çalışacak ama namespace henüz yoktu.
+Çözüm: Önce namespace’i apply ettim, sonra deployment’ı uyguladım. Artık podlar sorunsuz şekilde çalışıyor.
+
+                                                                             
+                                                                         *******************************
+
+
+3)Service oluşturma
+
+a)Service (ClusterIP)
+Bu adımda nginx uygulamasına cluster içinden erişim sağlamak için ClusterIP servisi oluşturuldu.
+
+**Kullanılan komutlar
+<kubectl apply -f nginx-clusterip.yaml>
+<kubectl get svc -n demo>
+
+**Çıktılar
+service/nginx-clusterip created
+NAME              TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)   AGE
+nginx-clusterip   ClusterIP   10.102.152.127   <none>        80/TCP    0s
+
+** Hatalar/Çözümler
+Hata: yok
+Çözüm: yok
+
+b)Service (NodePort)
+Bu adımda nginx uygulamasına dışarıdan test erişimi sağlamak için NodePort servisi oluşturuldu.
+
+**Kullanılan komutlar
+<kubectl apply -f services/nginx-nodeport.yaml>
+<kubectl get svc -n demo>
+
+**Çıktılar
+service/nginx-service created
+NAME              TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
+nginx-clusterip   ClusterIP   10.102.152.127   <none>        80/TCP         10m
+nginx-service     NodePort    10.104.14.94     <none>        80:30080/TCP   0s
+
+** Hatalar/Çözümler
+Hata: yok
+Çözüm: yok
+
+
+                                                                *******************************
+
+4) Ingress
+Bu adımda nginx uygulamasına kalıcı dış erişim için Ingress oluşturuldu. Yaml dosyasını oluşturduktan sonra /etc/hosts dosyasına 127.0.0.1   myapp.local şartını ekledim.Bu şarttan sonra apply ettim.
+
+**Kullanılan komutlar
+<kubectl apply -f ingress/nginx-ingress.yaml -n demo>
+<kubectl get ingress -n demo>
+<curl http://myapp.local>
+
+**Çıktılar
+AME            CLASS    HOSTS         ADDRESS   PORTS   AGE
+nginx-ingress   <none>   myapp.local             80      8s
+
+** Hatalar/Çözümler
+1.Hata: curl: (7) Failed to connect to myapp.local port 80 after 0 ms: Couldn't connect to server
+2.Hata: error: the path "ingress/nginx-ingress.yaml" does not exist
+
+
+1.Hatanın sebebi: Ingress Controller cluster’da yok veya NodePort/LoadBalancer üzerinden bağlantı kurulamadı.
+2. Hatanın sebebi: Verilen dosya yolu yanlış veya ingress/nginx-ingress.yaml dosyası mevcut değil.
+
+** Çözümler
+
+-1.Hatanın çözümü
+Cluster tipini ve ortamını kontrol et
+# Cluster node’larını gör
+kubectl get nodes
+# Cluster sürümü ve info
+kubectl version
+kubectl cluster-info
+#Ingress Controller'ı Helm ile kur
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+helm install ingress-nginx ingress-nginx/ingress-nginx --namespace ingress-nginx --create-namespace
+# Pod ve servisleri kontrol et
+kubectl get pods -n ingress-nginx
+kubectl get svc -n ingress-nginx
+# Node IP ve NodePort'u al
+NODE_IP=192.168.1.52              # kubectl get nodes -o wide ile bul
+NODE_PORT=32391                   # kubectl get svc -n ingress-nginx ile HTTP NodePort al
+# /etc/hosts kaydı ekle
+echo "$NODE_IP myapp.local" | sudo tee -a /etc/hosts
+# Ingress resource'u apply et
+kubectl apply -f ~/k8s-manifest/ingress/nginx-ingress.yaml -n demo
+# Ingress durumunu kontrol et
+kubectl get ingress -n demo
+# Test (NodePort üzerinden)
+curl http://myapp.local:$NODE_PORT
+
+
+-2.Hataının çözümü
+İlgili klasöre gidip işlemi yapmak veya dosyanın yolunu doğru belirlemek.
+
+                       
+                                                                       *******************************                                                                    
+                                                                    
+5) ConfigMap & Secret
+Bu adımda nginx uygulamasına metin ve şifre gibi çevresel değişkenler (env) eklemek için ConfigMap ve Secret kullanıldı. ConfigMap içinde WELCOME_MESSAGE, Secret içinde DB_PASSWORD tanımlandı. Dosyaları oluşturduktan sonra apply edilip Deployment yeniden başlatıldı.
+
+** Kullanılan komutlar
+
+<kubectl apply -f ~/k8s-manifest/configmaps/app-config.yaml -n demo>
+<kubectl apply -f ~/k8s-manifest/secrets/app-secret.yaml -n demo>
+<kubectl rollout restart deployment nginx-deploy -n demo>
+<kubectl get pods -n demo>
+<kubectl exec -it <yeni-pod-ismi> -n demo -- env | grep WELCOME_MESSAGE>
+<kubectl exec -it <yeni-pod-ismi> -n demo -- env | grep DB_PASSWORD>
+
+** Çıktılar
+
+WELCOME_MESSAGE=Merhaba, demo ortamına hoşgeldiniz!
+DB_PASSWORD=mysecret
+
+
+-- ConfigMap & Secret Güncelleme Adımları --
+Metin (ConfigMap) veya şifre (Secret) değişikliklerinden sonra doğru değerleri görebilmek için aşağıdaki adımlar uygulanmalıdır:
+
+1. Adım – Güncellenen ConfigMap ve Secret’i apply et:
+kubectl apply -f ~/k8s-manifest/configmaps/app-config.yaml -n demo
+kubectl apply -f ~/k8s-manifest/secrets/app-secret.yaml -n demo
+2. Adım – Deployment’ı yeniden başlat:
+kubectl rollout restart deployment nginx-deploy -n demo
+3. Adım – Yeni pod’un hazır olup olmadığını kontrol et:
+kubectl get pods -n demo
+# Pod STATUS=Running ve READY=1/1 olana kadar bekle
+4. Adım – Yeni pod’un env değişkenlerini kontrol et:
+kubectl exec -it <yeni-pod-ismi> -n demo -- env | grep WELCOME_MESSAGE
+kubectl exec -it <yeni-pod-ismi> -n demo -- env | grep DB_PASSWORD
+
+
+** Hatalar/Çözümler
+Hata: yok
+Çözüm: yok
+
+                       
+                                                                       *******************************
+                                                                       
+ 6) Readiness & Liveness
+ Bu adımda nginx container’ının hazır olma ve canlılık kontrolleri için Readiness ve Liveness probe’ları Deployment içinde tanımlandı.
+
+** Kullanılan komutlar**
+<kubectl get deployment nginx-deploy -n demo -o yaml | grep -A10 readinessProbe>
+<kubectl get deployment nginx-deploy -n demo -o yaml | grep -A10 livenessProbe>
+<kubectl get pods -n demo>
+<kubectl describe pod <pod-ismi> -n demo>
+
+** Çıktılar
+Liveness:       http-get http://:80/ delay=10s timeout=1s period=15s #success=1 #failure=3
+Readiness:      http-get http://:80/ delay=5s timeout=1s period=10s #success=1 #failure=3
+
+** Hatalar/Çözümler
+Hata: yok
+Çözüm: yok
