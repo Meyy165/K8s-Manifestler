@@ -31,4 +31,15 @@ spec:
               port: 80
             initialDelaySeconds: 10
             periodSeconds: 15
+          env:
+            - name: WELCOME_MESSAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: nginx-config
+                  key: welcome-message
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: password
 

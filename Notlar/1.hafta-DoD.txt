@@ -29,8 +29,9 @@ Hafta 1 — Namespace + Deployment + Service (ClusterIP & NodePort) + Ingress + 
 - Replicas sayısı doğru
   (Kontrol: kubectl get deployment nginx-deploy -n demo -o yaml | grep replicas)
   
-03 – ClusterIP DoD
+03 – Service
 
+a) ClusterIP DoD
 - ClusterIP servis manifesti git repoda mevcut
 (Kontrol: ls -R | grep nginx-clusterip.yaml)
 - Servis tipi doğru tanımlanmış (ClusterIP)
@@ -43,9 +44,7 @@ Hafta 1 — Namespace + Deployment + Service (ClusterIP & NodePort) + Ingress + 
 (Kontrol: kubectl get svc -n demo)
 
 
-
-04 - NodePort DoD
-
+b) NodePort DoD
 - Servis manifesti git repoda mevcut
 (Kontrol: ls -R | grep nginx-nodeport.yaml)
 - NodePort tipi doğru tanımlanmış
@@ -58,17 +57,48 @@ Hafta 1 — Namespace + Deployment + Service (ClusterIP & NodePort) + Ingress + 
 (Kontrol: kubectl get svc -n demo → Servis demo namespace’inde olmalı)
 
 
-05 – Ingress DoD
+04 – Ingress DoD
 
-Manifest repo’da mevcut
+- Manifest repo’da mevcut
 (Kontrol: ls -R | grep nginx-ingress.yaml)
-Ingress resource demo namespace’inde oluşturulmuş
+- Ingress resource demo namespace’inde oluşturulmuş
 (Kontrol: kubectl get ingress -n demo)
-Host doğru tanımlanmış (myapp.local)
+- Host doğru tanımlanmış (myapp.local)
 (Kontrol: kubectl describe ingress nginx-ingress -n demo | grep Host)
-Pod’lara trafik yönleniyor (Service selector ile eşleşiyor)
+- Pod’lara trafik yönleniyor (Service selector ile eşleşiyor)
 (Kontrol: kubectl describe ingress nginx-ingress -n demo)
-Dış erişim sağlanabiliyor (/etc/hosts ile)
+- Dış erişim sağlanabiliyor (/etc/hosts ile)
 (Kontrol: curl http://myapp.local → nginx karşılama sayfası gelmeli )
-Ingress Controller cluster’da çalışıyor
+- Ingress Controller cluster’da çalışıyor
 (Kontrol: kubectl get pods -n ingress-nginx ve kubectl get svc -n ingress-nginx)
+
+
+05 – ConfigMap & Secret DoD
+
+- ConfigMap manifesti git reposunda mevcut
+(Kontrol: ls -R | grep app-config.yaml)
+- Secret manifesti git reposunda mevcut
+(Kontrol: ls -R | grep app-secret.yaml)
+- ConfigMap ve Secret apply edildi
+(Kontrol: kubectl apply -f ~/k8s-manifest/configmaps/app-config.yaml -n demo kubectl apply -f ~/k8s-manifest/secrets/app-secret.yaml -n demo)
+- Deployment yeniden başlatıldı, pod’lar yeni değerleri alıyor
+(Kontrol: kubectl rollout restart deployment nginx-deploy -n demo)
+- Yeni pod’lar demo namespace’de çalışıyor
+(Kontrol: kubectl get pods -n demo)
+- Pod env değerleri doğru metin ve şifreyi gösteriyor
+(Kontrol: kubectl exec -it <yeni-pod-ismi> -n demo -- env | grep WELCOME_MESSAGE
+kubectl exec -it <yeni-pod-ismi> -n demo -- env | grep DB_PASSWORD)
+
+
+06 – Readiness & Liveness
+
+- Deployment manifesti içinde readiness ve liveness probe tanımları mevcut
+(Kontrol: <kubectl get deployment nginx-deploy -n demo -o yaml | grep -A10 readinessProbe> ve <kubectl get deployment nginx-deploy -n demo -o yaml | grep -A10 livenessProbe>)
+- Readiness probe doğru tanımlanmış
+(Kontrol: yaml içindeki readinessProbe değerleri)
+- Liveness probe doğru tanımlanmış
+(Kontrol: yaml içindeki livenessProbe değerleri)
+- Pod’lar başarıyla başlatılmış ve READY=1/1 durumda
+(Kontrol: <kubectl get pods -n demo> → STATUS=Running ve READY=1/1)
+- Pod detayları doğrulanmış
+(Kontrol: <kubectl describe pod <pod-ismi> -n demo> → container ID, image, env değişkenleri, probe ayarları, durumlar)
