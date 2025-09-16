@@ -1,0 +1,49 @@
+Hafta 2 — CPU/RAM requests & limits + HPA + PVC ve StatefulSet + Veritabanı deploy etme ve veri kaybı testi
+
+01 – CPU / RAM Requests & Limits
+- Deployment veya StatefulSet manifestinde container resources tanımlı
+  (Kontrol: kubectl get deployment <deployment-ismi> -n demo -o yaml | grep -A5 resources)
+- requests ve limits doğru şekilde tanımlanmış
+  (Kontrol: yaml içindeki cpu ve memory değerleri)
+- Pod’lar çalışıyor ve kaynak sınırları uygulanıyor
+  (Kontrol: kubectl describe pod <pod-ismi> -n demo | grep -A5 Limits)
+
+
+02 – HPA (Horizontal Pod Autoscaler)
+- HPA manifesti git reposunda mevcut
+  (Kontrol: ls -R | grep nginx-hpa.yaml)
+- HPA apply edilmiş
+  (Kontrol: kubectl apply -f hpa/nginx-hpa.yaml -n demo)
+- HPA doğru target CPU/RAM değerleriyle tanımlanmış
+  (Kontrol: kubectl get hpa -n demo -o yaml)
+- Pod sayısı autoscale edilebiliyor
+  (Kontrol: kubectl get hpa -n demo → CURRENT REPLICAS / DESIRED REPLICAS)
+
+
+03 – PVC ve StatefulSet
+- PVC manifesti git reposunda mevcut
+  (Kontrol: ls -R | grep mysql-pv.yaml)
+- StatefulSet manifesti git reposunda mevcut
+  (Kontrol: ls -R | grep db-stateful.yaml)
+- PV ve PVC oluşturulmuş ve Bound durumda
+  (Kontrol: kubectl get pv; kubectl get pvc -n demo)
+- StatefulSet pod’ları çalışıyor
+  (Kontrol: kubectl get pods -n demo → STATUS=Running)
+- HostPath izinleri ve sahibi container UID’ye uygun
+  (Kontrol: sudo ls -l /mnt/data/mysql)
+- PVC bağlı ve veri kaybı olmadan pod restart edilebiliyor
+  (Kontrol: kubectl delete pod mysql-0 -n demo → veri kaybolmadı)
+
+
+04 – Veritabanı Deploy ve Veri Kaybı Testi
+- MySQL StatefulSet pod’u çalışıyor
+  (Kontrol: kubectl get pods -n demo | grep mysql-0)
+- Pod container Running durumda
+  (Kontrol: STATUS=Running)
+- Database login mümkün
+  (Kontrol: kubectl exec -it mysql-0 -n demo -- mysql -uroot -p)
+- Örnek tablo oluşturuldu ve veri eklendi
+  (Kontrol: CREATE TABLE test (...); INSERT INTO test VALUES(...);)
+- Pod silinip yeniden başlatıldığında veri korunuyor
+  (Kontrol: kubectl delete pod mysql-0 -n demo → tekrar login → SELECT * FROM test)
+

@@ -1,0 +1,217 @@
+Hafta 2 — CPU/RAM requests & limits + HPA + PVC ve StatefulSet + Veritabanı deploy etme ve veri kaybı testi
+
+1) CPU/RAM requests & limits
+BBu adımda pod’lar için CPU ve RAM kullanımı sınırlandırıldı.
+
+** Kullanılan komutlar
+<kubectl apply -f deployments/nginx-deploy.yaml>  
+<kubectl describe pod <pod-ismi> -n demo | grep -A5 "Limits">  
+
+
+** Çıktılar
+Limits:  
+  cpu:     500m  
+  memory:  256Mi  
+Requests:  
+  cpu:     250m  
+  memory:  128Mi  
+  
+** Hatalar/Çözümler
+Hata: yok
+Çözüm: yok
+
+                       
+                                                                       *******************************
+                       
+2) HPA (Horizontal Pod Autoscaler)
+
+Bu adımda deployment için CPU bazlı otomatik ölçeklendirme uygulandı.
+
+** Kullanılan komutlar
+<kubectl apply -f hpa/nginx-hpa.yaml -n demo>
+<kubectl get hpa -n demo>
+<kubectl describe hpa nginx-hpa -n demo>
+
+** Çıktılar
+NAME        REFERENCE                 TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+nginx-hpa   Deployment/nginx-deploy   1%/50%    1         5         1          11h
+
+Metrics: resource cpu on pods: 1% / 50%
+Deployment pods: 1 current / 1 desired
+Conditions:
+  AbleToScale:     True
+  ScalingActive:   True
+  ScalingLimited:  False
+Events:
+  Warning  FailedComputeMetricsReplicas  27m  invalid metrics (1 invalid out of 1)
+  Warning  FailedGetResourceMetric       15m  failed to get cpu utilization: no metrics returned from resource metrics API
+
+** Hatalar/Çözümler
+Hata: Warning  FailedComputeMetricsReplicas  invalid metrics (1 invalid out of 1)
+      Warning  FailedGetResourceMetric       failed to get cpu utilization: no metrics returned from resource metrics API
+
+Sebep:
+Metrics-server kurulu olmadığı için HPA pod’ların CPU kullanım verilerini alamadı.
+
+Çözüm (Adımlar):
+Metrics-server manifest’i apply edildi:
+<kubectl apply -f ~/k8s-manifest/metrics-server.yaml>
+
+Çalıştığını doğrulamak için pod durumu kontrol edildi:
+<kubectl get pods -n kube-system | grep metrics-server>
+
+Beklenen çıktı: Running
+HPA tekrar kontrol edildi:
+
+<kubectl get hpa -n demo>
+<kubectl describe hpa nginx-hpa -n demo>
+kubectl top pods -n demo ile CPU/RAM metrikleri görüldü.
+
+                       
+                                                                       *******************************
+                       
+                       
+3) PVC ve StatefulSet (MySQL)
+Bu adımda kalıcı depolama için PersistentVolumeClaim (PVC) tanımlayıp, MySQL’i StatefulSet ile deploy ettim. Böylece pod silinse bile veritabanı verilerin kaybolmayacak.
+
+** Kullanılan komutlar
+<kubectl apply -f statefulsets/mysql-statefulset.yaml -n demo>
+<kubectl get pods -n demo>
+<kubectl get pvc -n demo>
+
+** Çıktılar
+
+Komut: kubectl get pods -n demo
+Çıktı:
+NAME                           READY   STATUS    RESTARTS   AGE
+mysql-0                        1/1     Running   0          28h
+nginx-deploy-b84d7bf54-v5sqj   1/1     Running   0          110m
+
+Komut: kubectl get hpa -n demo
+Çıktı:
+NAME        REFERENCE                 TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+nginx-hpa   Deployment/nginx-deploy   1%/50%    1         5         1          29h
+
+
+** Hatalar/Çözümler
+Eğer CrashLoopBackOff olursa → genelde root password Secret’ı ya da volume hatalıdır.
+PVC Pending kalırsa → cluster’da uygun storage class yok demektir.
+
+                       
+                                                                       *******************************
+                  
+                  
+4) Veri Kaybı Testi
+
+MySQL’e bağlanıp test tablosu oluşturdum. Pod’u sildikten sonra tekrar bağlanıp verinin durumunu kontrol ettim.
+
+** Kullanılan komutlar
+<kubectl exec -it mysql-0 -n demo -- mysql -uroot -p>
+
+CREATE DATABASE testdb;
+USE testdb;
+CREATE TABLE deneme(id INT PRIMARY KEY, ad VARCHAR(50));
+INSERT INTO deneme VALUES (1, 'K8s-Test');
+SELECT * FROM deneme;
+
+
+Pod’u sil: <kubectl delete pod mysql-0 -n demo>
+
+Tekrar bağlan: 
+<kubectl exec -it mysql-0 -n demo -- mysql -uroot -p>
+
+USE testdb;
+SELECT * FROM deneme;
+
+                       
+                                                                       *******************************
+                  
+                 
+Aldığım hatalar
+
+1) Error: secret "app-secret" not found
+Nginx pod’unun başlatılabilmesi için gerekli Secret bulunamıyor. (Secret eksik veya yanlış isimle oluşturulmuş)
+
+2) Error: couldn't find key root-password in Secret demo/db-secret
+MySQL container’ı root şifresini Secret’tan alamıyor. Secret içindeki key eksik veya yanlış.
+
+3) 0/3 nodes are available: 2 node(s) didn't find available persistent volumes to bind
+MySQL için PV/PVC bulunamadı. (HostPath PV yok, yanlış veya henüz bind edilmemiş)
+
+4) STATUS=Pending / STATUS=CreateContainerConfigError
+Pod başlatılamıyor. Genellikle eksik Secret/ConfigMap veya yanlış env referansı yüzünden.
+
+5) error: unable to upgrade connection: container not found ("mysql")
+MySQL pod’u henüz çalışmadığı veya CrasLoopBackOff’ta olduğu için exec/port-forward bağlanılamıyor.
+
+6) 0/3 nodes are available: persistentvolumeclaim "mysql-data-mysql-0" is being deleted
+PVC silinme sürecinde, pod bağlanamıyor. Finalizer yüzünden takılı kalmış olabilir.
+
+7) InnoDB initialization has started. Cannot create redo log files because data files are corrupt or the database was not shut down cleanly
+MySQL veri dosyaları bozuk veya eski veriler temizlenmemiş → CrashLoopBackOff.
+
+8) 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }
+Pod’u kontrol-plane node’una schedule etmeye çalışıyor ama toleration yok.
+
+9) mysql-0 0/1 ContainerCreating → Running → Error → CrashLoopBackOff
+MySQL pod’u başlatılıyor ama PV/PVC, veri izinleri veya bozuk veriler yüzünden sürekli çökmekte.
+
+
+Aldığım hataların sebebleri
+MySQL → PV/PVC + hostPath üzerinde kalan bozuk veriler ve izinler yüzünden CrashLoopBackOff
+
+Nginx → eksik/yanlış Secret veya ConfigMap referansları yüzünden CreateContainerConfigError
+
+
+
+
+Aldığım hataların çözümleri
+
+1)
+kubectl apply -f secrets/app-secret.yaml -n demo
+
+2)
+kubectl apply -f secrets/db-secret.yaml -n demo   
+kubectl get secret db-secret -n demo -o yaml
+kubectl get secret db-secret -n demo -o jsonpath='{.data.root-password}' | base64 --decode; echo
+
+3)
+kubectl apply -f statefulsets_pvc/mysql-pv.yaml
+ls -ld /mnt/data/mysql
+sudo mkdir -p /mnt/data/mysql
+
+4)
+kubectl apply -f configmaps/app-config.yaml -n demo
+kubectl apply -f secrets/app-secret.yaml -n demo
+kubectl delete pod -l app=nginx -n demo
+
+5)
+kubectl logs mysql-0 -n demo
+kubectl get pods -n demo -w
+
+6)
+kubectl patch pvc mysql-data-mysql-0 -n demo -p '{"metadata":{"finalizers":null}}'
+kubectl delete pvc mysql-data-mysql-0 -n demo
+kubectl patch pv mysql-pv -p '{"metadata":{"finalizers":null}}'
+kubectl delete pv mysql-pv
+
+7)
+sudo rm -rf /mnt/data/mysql
+sudo mkdir -p /mnt/data/mysql_clean
+sudo chown -R 999:999 /mnt/data/mysql_clean
+sudo chmod -R 700 /mnt/data/mysql_clean
+kubectl apply -f statefulsets_pvc/mysql-pv.yaml
+kubectl apply -f statefulsets_pvc/db-stateful.yaml
+
+8)
+kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+
+9)
+sudo chown -R 999:999 /mnt/data/mysql*
+sudo chmod -R 700 /mnt/data/mysql*
+kubectl patch pvc mysql-data-mysql-0 -n demo -p '{"metadata":{"finalizers":null}}'
+kubectl patch pv mysql-pv -p '{"metadata":{"finalizers":null}}'
+kubectl apply -f statefulsets_pvc/db-stateful.yaml
+kubectl get pods -n demo -w
+
+
