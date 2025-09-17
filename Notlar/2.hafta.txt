@@ -171,9 +171,12 @@ Aldığım hataların çözümleri
 kubectl apply -f secrets/app-secret.yaml -n demo
 
 2)
+ilk adım yaml dosyasının içini düzeltme aşağdaki şekil ile
+data:
+  root-password: bXlzZWNyZXQ=
 kubectl apply -f secrets/db-secret.yaml -n demo   
-kubectl get secret db-secret -n demo -o yaml
-kubectl get secret db-secret -n demo -o jsonpath='{.data.root-password}' | base64 --decode; echo
+kubectl -n demo delete pod mysql-0
+kubectl -n demo get pods -w
 
 3)
 kubectl apply -f statefulsets_pvc/mysql-pv.yaml
